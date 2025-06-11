@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meteor Storm</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #0f0f23 0%, #000000 100%);
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            overflow: hidden;
+            cursor: none;
+        }
+
+        #gameCanvas {
+            border: 2px solid #00ff00;
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(180deg, #000011 0%, #000033 50%, #000011 100%);
+            box-shadow: 0 0 50px #00ff00;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ff00;
+            font-size: 18px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .game-over-screen, .start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 3px solid #ff0066;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            z-index: 20;
+            box-shadow: 0 0 50px #ff0066;
+        }
+
+        .start-screen {
+            border-color: #00ff00;
+            box-shadow: 0 0 50px #00ff00;
+        }
+
+        .game-title {
+            font-size: 3em;
+            color: #ff0066;
+            text-shadow: 0 0 20px #ff0066;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        .start-screen .game-title {
+            color: #00ff00;
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        @keyframes pulse {
+            0%, 100% { text-shadow: 0 0 20px currentColor; }
+            50% { text-shadow: 0 0 40px currentColor, 0 0 60px currentColor; }
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #ff0066, #ff3388);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(255, 0, 102, 0.5);
+        }
+
+        .start-screen .btn {
+            background: linear-gradient(45deg, #00ff00, #33ff33);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        .btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px currentColor;
+        }
+
+        .instructions {
+            font-size: 1.1em;
+            line-height: 1.5;
+            margin: 20px 0;
+            color: #ffffff;
+        }
+
+        .power-up-legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #00ff00;
+            font-size: 14px;
+            text-shadow: 0 0 5px #00ff00;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="starfield"></div>
+    
+    <div class="hud">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>LEVEL: <span id="level">1</span></div>
+        <div>LIVES: <span id="lives">3</span></div>
+        <div>SHIELDS: <span id="shields">100</span>%</div>
+    </div>
+
+    <div class="power-up-legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffff00; box-shadow: 0 0 10px #ffff00;"></div>
+            <span>Speed Boost</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #00ffff; box-shadow: 0 0 10px #00ffff;"></div>
+            <span>Shield Restore</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff00ff; box-shadow: 0 0 10px #ff00ff;"></div>
+            <span>Time Slow</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffffff; box-shadow: 0 0 10px #ffffff;"></div>
+            <span>Extra Life</span>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div id="startScreen" class="start-screen">
+        <div class="game-title">METEOR STORM</div>
+        <div class="instructions">
+            🚀 Navigate your ship with mouse/WASD<br>
+            ☄️ Dodge meteors and collect power-ups<br>
+            💥 Survive as long as possible!<br>
+            🛡️ Your shields protect you from impacts
+        </div>
+        <button class="btn" onclick="startGame()">LAUNCH SHIP</button>
+    </div>
+
+    <div id="gameOverScreen" class="game-over-screen" style="display: none;">
+        <div class="game-title">SHIP DESTROYED</div>
+        <div id="finalStats"></div>
+        <button class="btn" onclick="restartGame()">RESPAWN</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let gameState = {
+            player: { x: 400, y: 500, size: 15, speed: 5, shields: 100 },
+            meteors: [],
+            powerUps: [],
+            particles: [],
+            score: 0,
+            level: 1,
+            lives: 3,
+            isPlaying: false,
+            keys: {},
+            mouse: { x: 400, y: 300 },
+            effects: {
+                speedBoost: 0,
+                timeSlowActive: false,
+                timeSlowDuration: 0
+            }
+        };
+
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            gameState.keys[e.code] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            gameState.keys[e.code] = false;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+        });
+
+        function createStarfield() {
+            const starfield = document.getElementById('starfield');
+            for (let i = 0; i < 100; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.width = Math.random() * 3 + 1 + 'px';
+                star.style.height = star.style.width;
+                star.style.animationDelay = Math.random() * 3 + 's';
+                starfield.appendChild(star);
+            }
+        }
+
+        function spawnMeteor() {
+            const timeMultiplier = gameState.effects.timeSlowActive ? 0.3 : 1;
+            if (Math.random() < 0.02 + (gameState.level * 0.005) * timeMultiplier) {
+                gameState.meteors.push({
+                    x: Math.random() * canvas.width,
+                    y: -30,
+                    size: Math.random() * 20 + 15,
+                    speed: (Math.random() * 3 + 2 + gameState.level * 0.5) * timeMultiplier,
+                    rotation: 0,
+                    rotationSpeed: (Math.random() - 0.5) * 0.2
+                });
+            }
+        }
+
+        function spawnPowerUp() {
+            if (Math.random() < 0.005) {
+                const types = ['speed', 'shield', 'timeSlow', 'life'];
+                const colors = ['#ffff00', '#00ffff', '#ff00ff', '#ffffff'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                gameState.powerUps.push({
+                    x: Math.random() * (canvas.width - 40) + 20,
+                    y: -20,
+                    size: 12,
+                    speed: 2,
+                    type: type,
+                    color: colors[types.indexOf(type)],
+                    pulse: 0
+                });
+            }
+        }
+
+        function updatePlayer() {
+            // Keyboard movement
+            if (gameState.keys['KeyW'] || gameState.keys['ArrowUp']) gameState.player.y -= gameState.player.speed;
+            if (gameState.keys['KeyS'] || gameState.keys['ArrowDown']) gameState.player.y += gameState.player.speed;
+            if (gameState.keys['KeyA'] || gameState.keys['ArrowLeft']) gameState.player.x -= gameState.player.speed;
+            if (gameState.keys['KeyD'] || gameState.keys['ArrowRight']) gameState.player.x += gameState.player.speed;
+            
+            // Mouse movement (blend with keyboard)
+            const mouseInfluence = 0.05;
+            gameState.player.x += (gameState.mouse.x - gameState.player.x) * mouseInfluence;
+            gameState.player.y += (gameState.mouse.y - gameState.player.y) * mouseInfluence;
+            
+            // Speed boost effect
+            if (gameState.effects.speedBoost > 0) {
+                gameState.player.speed = 8;
+                gameState.effects.speedBoost--;
+            } else {
+                gameState.player.speed = 5;
+            }
+            
+            // Time slow effect
+            if (gameState.effects.timeSlowDuration > 0) {
+                gameState.effects.timeSlowActive = true;
+                gameState.effects.timeSlowDuration--;
+            } else {
+                gameState.effects.timeSlowActive = false;
+            }
+            
+            // Keep player in bounds
+            gameState.player.x = Math.max(gameState.player.size, Math.min(canvas.width - gameState.player.size, gameState.player.x));
+            gameState.player.y = Math.max(gameState.player.size, Math.min(canvas.height - gameState.player.size, gameState.player.y));
+        }
+
+        function updateMeteors() {
+            for (let i = gameState.meteors.length - 1; i >= 0; i--) {
+                const meteor = gameState.meteors[i];
+                meteor.y += meteor.speed;
+                meteor.rotation += meteor.rotationSpeed;
+                
+                // Remove meteors that are off screen
+                if (meteor.y > canvas.height + 50) {
+                    gameState.meteors.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                const distance = Math.sqrt(
+                    Math.pow(meteor.x - gameState.player.x, 2) + 
+                    Math.pow(meteor.y - gameState.player.y, 2)
+                );
+                
+                if (distance < meteor.size + gameState.player.size) {
+                    // Hit!
+                    createExplosion(gameState.player.x, gameState.player.y);
+                    gameState.player.shields -= 25;
+                    gameState.meteors.splice(i, 1);
+                    
+                    if (gameState.player.shields <= 0) {
+                        gameState.lives--;
+                        gameState.player.shields = 100;
+                        
+                        if (gameState.lives <= 0) {
+                            endGame();
+                        }
+                    }
+                }
+            }
+        }
+
+        function updatePowerUps() {
+            for (let i = gameState.powerUps.length - 1; i >= 0; i--) {
+                const powerUp = gameState.powerUps[i];
+                powerUp.y += powerUp.speed;
+                powerUp.pulse += 0.2;
+                
+                // Remove power-ups that are off screen
+                if (powerUp.y > canvas.height + 20) {
+                    gameState.powerUps.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                const distance = Math.sqrt(
+                    Math.pow(powerUp.x - gameState.player.x, 2) + 
+                    Math.pow(powerUp.y - gameState.player.y, 2)
+                );
+                
+                if (distance < powerUp.size + gameState.player.size) {
+                    // Collected!
+                    applyPowerUp(powerUp.type);
+                    createPowerUpEffect(powerUp.x, powerUp.y, powerUp.color);
+                    gameState.powerUps.splice(i, 1);
+                    gameState.score += 50;
+                }
+            }
+        }
+
+        function applyPowerUp(type) {
+            switch (type) {
+                case 'speed':
+                    gameState.effects.speedBoost = 300; // 5 seconds at 60fps
+                    break;
+                case 'shield':
+                    gameState.player.shields = Math.min(100, gameState.player.shields + 40);
+                    break;
+                case 'timeSlow':
+                    gameState.effects.timeSlowDuration = 300; // 5 seconds
+                    break;
+                case 'life':
+                    gameState.lives = Math.min(5, gameState.lives + 1);
+                    break;
+            }
+        }
+
+        function createExplosion(x, y) {
+            for (let i = 0; i < 15; i++) {
+                gameState.particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 30,
+                    maxLife: 30,
+                    color: Math.random() > 0.5 ? '#ff4444' : '#ffaa00'
+                });
+            }
+        }
+
+        function createPowerUpEffect(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                gameState.particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 20,
+                    maxLife: 20,
+                    color: color
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const particle = gameState.particles[i];
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                particle.life--;
+                
+                if (particle.life <= 0) {
+                    gameState.particles.splice(i, 1);
+                }
+            }
+        }
+
+        function draw() {
+            // Clear canvas with space background
+            ctx.fillStyle = 'rgba(0, 0, 17, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw time slow effect
+            if (gameState.effects.timeSlowActive) {
+                ctx.fillStyle = 'rgba(255, 0, 255, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Draw particles
+            gameState.particles.forEach(particle => {
+                const alpha = particle.life / particle.maxLife;
+                ctx.fillStyle = particle.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                ctx.fillRect(particle.x - 2, particle.y - 2, 4, 4);
+            });
+            
+            // Draw meteors
+            gameState.meteors.forEach(meteor => {
+                ctx.save();
+                ctx.translate(meteor.x, meteor.y);
+                ctx.rotate(meteor.rotation);
+                
+                // Meteor glow
+                ctx.shadowColor = '#ff4444';
+                ctx.shadowBlur = 20;
+                
+                ctx.fillStyle = '#aa3333';
+                ctx.beginPath();
+                ctx.arc(0, 0, meteor.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#ff6666';
+                ctx.beginPath();
+                ctx.arc(-meteor.size/3, -meteor.size/3, meteor.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            });
+            
+            // Draw power-ups
+            gameState.powerUps.forEach(powerUp => {
+                const pulseSize = powerUp.size + Math.sin(powerUp.pulse) * 3;
+                
+                ctx.shadowColor = powerUp.color;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = powerUp.color;
+                ctx.beginPath();
+                ctx.arc(powerUp.x, powerUp.y, pulseSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Inner core
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(powerUp.x, powerUp.y, pulseSize/3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw player ship
+            ctx.save();
+            ctx.translate(gameState.player.x, gameState.player.y);
+            
+            // Ship glow
+            ctx.shadowColor = '#00ff00';
+            ctx.shadowBlur = gameState.effects.speedBoost > 0 ? 30 : 15;
+            
+            // Speed boost trail
+            if (gameState.effects.speedBoost > 0) {
+                ctx.fillStyle = '#ffff00';
+                ctx.beginPath();
+                ctx.arc(0, 10, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Ship body
+            ctx.fillStyle = '#00ff00';
+            ctx.beginPath();
+            ctx.moveTo(0, -gameState.player.size);
+            ctx.lineTo(-gameState.player.size/2, gameState.player.size);
+            ctx.lineTo(gameState.player.size/2, gameState.player.size);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Ship cockpit
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, -gameState.player.size/2, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+            
+            // Reset shadow
+            ctx.shadowBlur = 0;
+        }
+
+        function updateGame() {
+            if (!gameState.isPlaying) return;
+            
+            updatePlayer();
+            spawnMeteor();
+            spawnPowerUp();
+            updateMeteors();
+            updatePowerUps();
+            updateParticles();
+            
+            // Update score and level
+            gameState.score += 1;
+            gameState.level = Math.floor(gameState.score / 1000) + 1;
+            
+            // Update HUD
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('level').textContent = gameState.level;
+            document.getElementById('lives').textContent = gameState.lives;
+            document.getElementById('shields').textContent = Math.max(0, gameState.player.shields);
+            
+            draw();
+        }
+
+        function startGame() {
+            gameState.isPlaying = true;
+            document.getElementById('startScreen').style.display = 'none';
+            gameLoop();
+        }
+
+        function endGame() {
+            gameState.isPlaying = false;
+            document.getElementById('finalStats').innerHTML = `
+                Final Score: ${gameState.score}<br>
+                Level Reached: ${gameState.level}<br>
+                Meteors Survived: ${Math.floor(gameState.score / 10)}
+            `;
+            document.getElementById('gameOverScreen').style.display = 'block';
+        }
+
+        function restartGame() {
+            gameState = {
+                player: { x: 400, y: 500, size: 15, speed: 5, shields: 100 },
+                meteors: [],
+                powerUps: [],
+                particles: [],
+                score: 0,
+                level: 1,
+                lives: 3,
+                isPlaying: false,
+                keys: {},
+                mouse: { x: 400, y: 300 },
+                effects: {
+                    speedBoost: 0,
+                    timeSlowActive: false,
+                    timeSlowDuration: 0
+                }
+            };
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('startScreen').style.display = 'block';
+        }
+
+        function gameLoop() {
+            updateGame();
+            if (gameState.isPlaying) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Initialize
+        createStarfield();
+    </script>
+</body>
+</html>
